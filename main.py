@@ -1,22 +1,25 @@
 import uvicorn
+import time
+from datetime import datetime
+import asyncio
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from routers.v1.search_router import router as search_router
 from routers.v1.trending_router import router as trending_router
-from routers.v1.catergory_router import router as category_router
+from routers.v1.category_router import router as category_router
 from routers.v1.recent_router import router as recent_router
 from routers.v1.combo_routers import router as combo_router
 from routers.v1.sites_list_router import router as site_list_router
-from routers.home_router import router as home_router
 from routers.v1.search_url_router import router as search_url_router
+from routers.home_router import router as home_router
 from helper.uptime import getUptime
 from helper.dependencies import authenticate_request
 from mangum import Mangum
 from math import ceil
-import time
+from functools import lru_cache
 
-startTime = time.time() 
+startTime = time.time()
 
 app = FastAPI(
     title="Torrent-Api-Py",
@@ -40,23 +43,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cache status tracking
+cache_status = {
+    "last_refresh_start": None,
+    "last_refresh_end": None,
+    "last_refresh_completed": False
+}
 
-@app.get("/health")
-async def health_route(req: Request):
-    """
-    Health Route : Returns App details.
+# Cached data store
+cached_data = {
+    "search": None,
+    "trending": None,
+    "recent": None,
+    "combo": None
+}
 
-    """
-    return JSONResponse(
-        {
-            "app": "Torrent-Api-Py",
-            "version": "v" + "1.0.1",
-            "ip": req.client.host,
-            "uptime": ceil(getUptime(startTime)),
-        }
-    )
+# Cache the endpoints
+async def cache_data():
+    cache_status["last_refresh_start"] = datetime.utcnow()
+    cache_status["last_refresh_completed"] = False
 
+    cached_data["search"] = get_search_router()
+    cached_data["trending"] = get_trending_router()
+    cached_data["recent"] = get_recent_router()
+    cached_data["combo"] = get_combo_router()
 
+    cache_status["last_refresh_end"] = datetime.utcnow()
+    cache_status["last_refresh_completed"] = True
+
+@lru_cache(maxsize=1)
+def get_search_router():
+    return search_router
+
+@lru_cache(maxsize=1)
+def get_trending_router():
+    return trending_router
+
+@lru_cache(maxsize=1)
+def get_recent_router():
+    return recent_router
+
+@lru_cache(maxsize=1)
+def get_combo_router():
+    return combo_router
+
+# Include routers with cache
 app.include_router(search_router, prefix="/api/v1/search", dependencies=[Depends(authenticate_request)])
 app.include_router(trending_router, prefix="/api/v1/trending", dependencies=[Depends(authenticate_request)])
 app.include_router(category_router, prefix="/api/v1/category", dependencies=[Depends(authenticate_request)])
@@ -65,6 +96,32 @@ app.include_router(combo_router, prefix="/api/v1/all", dependencies=[Depends(aut
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(home_router, prefix="")
+
+# Cache refresh function
+async def refresh_cache():
+    while True:
+        await cache_data()
+        # Wait for 24 hours (86400 seconds)
+        await asyncio.sleep(86400)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(refresh_cache())
+
+@app.get("/health")
+async def health_route(req: Request):
+    """
+    Health Route : Returns App details including cache refresh info.
+    """
+    return JSONResponse(
+        {
+            "app": "Torrent-Api-Py",
+            "version": "v" + "1.0.1",
+            "ip": req.client.host,
+            "uptime": ceil(getUptime(startTime)),
+            "cache_refresh": cache_status
+        }
+    )
 
 handler = Mangum(app)
 
