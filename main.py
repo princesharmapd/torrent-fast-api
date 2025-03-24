@@ -1,4 +1,7 @@
 import uvicorn
+import aiohttp
+import asyncio
+import aiocron
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,6 +81,16 @@ async def health_route(req: Request):
             "uptime": ceil(getUptime(startTime)),
         }
     )
+
+# Scheduled task to ping the /health endpoint every 5 minutes
+@aiocron.crontab('*/5 * * * *')
+async def keep_alive():
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get("http://localhost:8009/health") as response:
+                print(f"[Keep-Alive] Health Check Status: {response.status}")
+        except Exception as e:
+            print(f"[Keep-Alive] Failed to ping health route: {e}")
 
 # Apply caching with a 1-hour expiry (3600 seconds)
 @cache_with_expiry(3600)
