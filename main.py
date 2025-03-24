@@ -15,7 +15,7 @@ from helper.dependencies import authenticate_request
 from mangum import Mangum
 from math import ceil
 import time
-from functools import lru_cache
+from functools import wraps
 
 startTime = time.time()
 
@@ -41,6 +41,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def cache_with_expiry(expiry_time: int):
+    def decorator(func):
+        cache = {}
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (args, tuple(kwargs.items()))
+            current_time = time.time()
+
+            # Check cache expiration
+            if key in cache:
+                result, timestamp = cache[key]
+                if current_time - timestamp < expiry_time:
+                    return result
+
+            # Fetch fresh data and cache it
+            result = func(*args, **kwargs)
+            cache[key] = (result, current_time)
+            return result
+
+        return wrapper
+
+    return decorator
+
 @app.get("/health")
 async def health_route(req: Request):
     """
@@ -55,20 +79,20 @@ async def health_route(req: Request):
         }
     )
 
-# Cache the endpoints using lru_cache
-@lru_cache(maxsize=100)
+# Apply caching with a 1-hour expiry (3600 seconds)
+@cache_with_expiry(3600)
 def get_search_router():
     return search_router
 
-@lru_cache(maxsize=100)
+@cache_with_expiry(3600)
 def get_trending_router():
     return trending_router
 
-@lru_cache(maxsize=100)
+@cache_with_expiry(3600)
 def get_recent_router():
     return recent_router
 
-@lru_cache(maxsize=100)
+@cache_with_expiry(3600)
 def get_combo_router():
     return combo_router
 
