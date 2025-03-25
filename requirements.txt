@@ -10,3 +10,4 @@ aioredis==2.0.1
 async-timeout==5.0.1
 typing_extensions==4.12.2
 aiocron
+motor==3.3.1 
