@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from routers.v1.search_router import router as search_router
 from routers.v1.trending_router import router as trending_router
-from routers.v1.catergory_router import router as category_router
+from routers.v1.category_router import router as category_router
 from routers.v1.recent_router import router as recent_router
 from routers.v1.combo_routers import router as combo_router
 from routers.v1.sites_list_router import router as site_list_router
