@@ -18,7 +18,19 @@ from helper.dependencies import authenticate_request
 from mangum import Mangum
 from math import ceil
 import time
+import hashlib
 from functools import wraps
+from motor.motor_asyncio import AsyncIOMotorClient
+
+# MongoDB Configuration
+MONGO_URI = "mongodb://princesharmaofficial1:Aaspl@12761234@cluster0-shard-00-00.3soyt.mongodb.net:27017,cluster0-shard-00-01.3soyt.mongodb.net:27017,cluster0-shard-00-02.3soyt.mongodb.net:27017/?replicaSet=atlas-c8y6jc-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority&appName=Cluster0"
+DB_NAME = "cache_db"
+COLLECTION_NAME = "api_cache"
+
+# Connect to MongoDB
+mongo_client = AsyncIOMotorClient(MONGO_URI)
+db = mongo_client[DB_NAME]
+cache_collection = db[COLLECTION_NAME]
 
 startTime = time.time()
 
@@ -44,24 +56,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def cache_with_expiry(expiry_time: int):
+# Function to hash request params for cache key
+def generate_cache_key(*args, **kwargs):
+    key_str = f"{args}-{kwargs}"
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+# Async MongoDB caching
+async def get_cached_response(key):
+    return await cache_collection.find_one({"_id": key})
+
+async def set_cached_response(key, response, expiry_time=3600):
+    await cache_collection.update_one(
+        {"_id": key},
+        {"$set": {"response": response, "timestamp": time.time()}},
+        upsert=True,
+    )
+
+def cache_with_mongo(expiry_time: int):
     def decorator(func):
-        cache = {}
-
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            key = (args, tuple(kwargs.items()))
-            current_time = time.time()
+        async def wrapper(*args, **kwargs):
+            key = generate_cache_key(args, kwargs)
+            cached_data = await get_cached_response(key)
 
-            # Check cache expiration
-            if key in cache:
-                result, timestamp = cache[key]
-                if current_time - timestamp < expiry_time:
-                    return result
+            if cached_data and (time.time() - cached_data["timestamp"] < expiry_time):
+                return cached_data["response"]
 
-            # Fetch fresh data and cache it
-            result = func(*args, **kwargs)
-            cache[key] = (result, current_time)
+            result = await func(*args, **kwargs)
+            await set_cached_response(key, result, expiry_time)
             return result
 
         return wrapper
@@ -92,28 +114,27 @@ async def keep_alive():
         except Exception as e:
             print(f"[Keep-Alive] Failed to ping health route: {e}")
 
-# Apply caching with a 1-hour expiry (3600 seconds)
-@cache_with_expiry(3600)
-def get_search_router():
+@cache_with_mongo(3600)
+async def get_search_router():
     return search_router
 
-@cache_with_expiry(3600)
-def get_trending_router():
+@cache_with_mongo(3600)
+async def get_trending_router():
     return trending_router
 
-@cache_with_expiry(3600)
-def get_recent_router():
+@cache_with_mongo(3600)
+async def get_recent_router():
     return recent_router
 
-@cache_with_expiry(3600)
-def get_combo_router():
+@cache_with_mongo(3600)
+async def get_combo_router():
     return combo_router
 
-app.include_router(get_search_router(), prefix="/api/v1/search", dependencies=[Depends(authenticate_request)])
-app.include_router(get_trending_router(), prefix="/api/v1/trending", dependencies=[Depends(authenticate_request)])
+app.include_router(await get_search_router(), prefix="/api/v1/search", dependencies=[Depends(authenticate_request)])
+app.include_router(await get_trending_router(), prefix="/api/v1/trending", dependencies=[Depends(authenticate_request)])
 app.include_router(category_router, prefix="/api/v1/category", dependencies=[Depends(authenticate_request)])
-app.include_router(get_recent_router(), prefix="/api/v1/recent", dependencies=[Depends(authenticate_request)])
-app.include_router(get_combo_router(), prefix="/api/v1/all", dependencies=[Depends(authenticate_request)])
+app.include_router(await get_recent_router(), prefix="/api/v1/recent", dependencies=[Depends(authenticate_request)])
+app.include_router(await get_combo_router(), prefix="/api/v1/all", dependencies=[Depends(authenticate_request)])
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(home_router, prefix="")
