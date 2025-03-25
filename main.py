@@ -6,6 +6,7 @@ import hashlib
 import time
 from math import ceil
 from functools import wraps
+from urllib.parse import quote_plus
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +16,7 @@ from mangum import Mangum
 # Import routers
 from routers.v1.search_router import router as search_router
 from routers.v1.trending_router import router as trending_router
-from routers.v1.category_router import router as category_router
+from routers.v1.catergory_router import router as catergory_router
 from routers.v1.recent_router import router as recent_router
 from routers.v1.combo_routers import router as combo_router
 from routers.v1.sites_list_router import router as site_list_router
@@ -26,15 +27,25 @@ from routers.v1.search_url_router import router as search_url_router
 from helper.uptime import getUptime
 from helper.dependencies import authenticate_request
 
-# MongoDB Configuration
-MONGO_URI = "mongodb://princesharmaofficial1:Aaspl@12761234@cluster0-shard-00-00.3soyt.mongodb.net:27017,cluster0-shard-00-01.3soyt.mongodb.net:27017,cluster0-shard-00-02.3soyt.mongodb.net:27017/?replicaSet=atlas-c8y6jc-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority&appName=Cluster0"
-DB_NAME = "cache_db"
-COLLECTION_NAME = "api_cache"
+# MongoDB Configuration with URL Encoding
+USERNAME = "princesharmaofficial1"
+PASSWORD = "Aaspl@12761234"  # Your password
+
+ENCODED_USERNAME = quote_plus(USERNAME)
+ENCODED_PASSWORD = quote_plus(PASSWORD)
+
+MONGO_URI = (
+    f"mongodb://{ENCODED_USERNAME}:{ENCODED_PASSWORD}@"
+    "cluster0-shard-00-00.3soyt.mongodb.net:27017," 
+    "cluster0-shard-00-01.3soyt.mongodb.net:27017," 
+    "cluster0-shard-00-02.3soyt.mongodb.net:27017/"
+    "?replicaSet=atlas-c8y6jc-shard-0&ssl=true&authSource=admin&retryWrites=true&w=majority&appName=Cluster0"
+)
 
 # Connect to MongoDB
 mongo_client = AsyncIOMotorClient(MONGO_URI)
-db = mongo_client[DB_NAME]
-cache_collection = db[COLLECTION_NAME]
+db = mongo_client["cache_db"]
+cache_collection = db["api_cache"]
 
 startTime = time.time()
 
@@ -45,7 +56,7 @@ app = FastAPI(
     description="Unofficial Torrent-Api",
     docs_url="/docs",
     contact={
-        "name": "Prince Sharma",
+        "name": "Neeraj Kumar",
         "url": "https://github.com/ryuk-me",
         "email": "neerajkr1210@gmail.com",
     },
@@ -92,7 +103,6 @@ def cache_with_mongo(expiry_time: int):
             return result
 
         return wrapper
-
     return decorator
 
 @app.get("/health")
@@ -119,25 +129,12 @@ async def keep_alive():
         except Exception as e:
             print(f"[Keep-Alive] Failed to ping health route: {e}")
 
-# Wrappers to include async routers properly
-def get_search_router():
-    return search_router
-
-def get_trending_router():
-    return trending_router
-
-def get_recent_router():
-    return recent_router
-
-def get_combo_router():
-    return combo_router
-
 # Include routers
-app.include_router(get_search_router(), prefix="/api/v1/search", dependencies=[Depends(authenticate_request)])
-app.include_router(get_trending_router(), prefix="/api/v1/trending", dependencies=[Depends(authenticate_request)])
-app.include_router(category_router, prefix="/api/v1/category", dependencies=[Depends(authenticate_request)])
-app.include_router(get_recent_router(), prefix="/api/v1/recent", dependencies=[Depends(authenticate_request)])
-app.include_router(get_combo_router(), prefix="/api/v1/all", dependencies=[Depends(authenticate_request)])
+app.include_router(search_router, prefix="/api/v1/search", dependencies=[Depends(authenticate_request)])
+app.include_router(trending_router, prefix="/api/v1/trending", dependencies=[Depends(authenticate_request)])
+app.include_router(catergory_router, prefix="/api/v1/category", dependencies=[Depends(authenticate_request)])
+app.include_router(recent_router, prefix="/api/v1/recent", dependencies=[Depends(authenticate_request)])
+app.include_router(combo_router, prefix="/api/v1/all", dependencies=[Depends(authenticate_request)])
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(home_router, prefix="")
