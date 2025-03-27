@@ -7,3 +7,4 @@ mangum
 motor
 requests
 uvicorn[standard]
+pymongo[srv]
