@@ -6,14 +6,14 @@ import asyncio
 from helper.error_messages import error_handler
 from motor.motor_asyncio import AsyncIOMotorClient
 import datetime
-from pymongo import MongoClient
-import ssl
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
 
 router = APIRouter(tags=["Combo Routes"])
 
 # MongoDB Connection
-MONGO_URI = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/torrent_cache?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
+uri = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+client = MongoClient(uri, server_api=ServerApi('1'))
 db = client["torrent_cache"]
 
 # Create TTL Index for automatic cache expiry (24 hours)
