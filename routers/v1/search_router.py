@@ -4,12 +4,13 @@ from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from motor.motor_asyncio import AsyncIOMotorClient
 import datetime
+import ssl
 
 router = APIRouter(tags=["Search"])
 
 # MongoDB Connection
-MONGO_URI = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-client = AsyncIOMotorClient(MONGO_URI)
+MONGO_URI = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/torrent_cache?retryWrites=true&w=majority"
+client = MongoClient(MONGO_URI, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
 db = client["torrent_cache"]
 
 # Function to create TTL index for a site-specific collection
