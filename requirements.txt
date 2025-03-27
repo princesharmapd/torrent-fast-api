@@ -4,5 +4,6 @@ cloudscraper
 fastapi==0.104.1
 gunicorn
 mangum
+motor
 requests
 uvicorn[standard]
