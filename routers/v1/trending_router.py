@@ -11,7 +11,7 @@ router = APIRouter(tags=["Trending Torrents"])
 
 # MongoDB Connection
 MONGO_URI = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/torrent_cache?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI, ssl=True, ssl_cert_reqs=ssl.CERT_NONE)
+client = MongoClient(MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
 db = client["torrent_cache"]
 
 # Function to create TTL index for automatic cache expiration
