@@ -1,11 +1,80 @@
-from fastapi import APIRouter
-from fastapi import status
+from fastapi import APIRouter, status
 from typing import Optional
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
+from aiocache import SimpleMemoryCache
 
 router = APIRouter(tags=["Recent Torrents Route"])
 
+# Initialize cache
+cache = SimpleMemoryCache()
+
+async def cache_response(key: str, func, expire: int = 86400):
+    """
+    Caches the response for 24 hours (86400 seconds).
+    If data is available in cache, it returns cached data.
+    If not, fetches new data, stores in cache, and returns it.
+    """
+    cached_data = await cache.get(key)
+    if cached_data:
+        return cached_data
+
+    data = await func()
+    await cache.set(key, data, ttl=expire)  # Store with 24-hour expiry
+    return data
+
+async def fetch_recent_results(site: str, limit: int, category: Optional[str], page: int):
+    all_sites = check_if_site_available(site)
+    site = site.lower()
+    category = category.lower() if category is not None else None
+
+    if all_sites:
+        limit = (
+            all_sites[site]["limit"]
+            if limit == 0 or limit > all_sites[site]["limit"]
+            else limit
+        )
+
+        if all_sites[site]["recent_available"]:
+            if category is not None and not all_sites[site]["recent_category_available"]:
+                return error_handler(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    json_message={"error": f"Search by Recent category not available for {site}."},
+                )
+
+            if category is not None and category not in all_sites[site]["categories"]:
+                return error_handler(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    json_message={
+                        "error": "Selected category not available.",
+                        "available_categories": all_sites[site]["categories"],
+                    },
+                )
+
+            resp = await all_sites[site]["website"]().recent(category, page, limit)
+            if resp is None:
+                return error_handler(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    json_message={"error": "Website Blocked. Change IP or Website Domain."},
+                )
+            elif len(resp["data"]) > 0:
+                return resp
+            else:
+                return error_handler(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    json_message={"error": "Result not found."},
+                )
+
+        else:
+            return error_handler(
+                status_code=status.HTTP_404_NOT_FOUND,
+                json_message={"error": f"Recent search not available for {site}."},
+            )
+
+    return error_handler(
+        status_code=status.HTTP_404_NOT_FOUND,
+        json_message={"error": "Selected Site Not Available"},
+    )
 
 @router.get("/")
 @router.get("")
@@ -15,60 +84,5 @@ async def get_recent(
     category: Optional[str] = None,
     page: Optional[int] = 1,
 ):
-    all_sites = check_if_site_available(site)
-    site = site.lower()
-    category = category.lower() if category is not None else None
-    if all_sites:
-        limit = (
-            all_sites[site]["limit"]
-            if limit == 0 or limit > all_sites[site]["limit"]
-            else limit
-        )
-        if all_sites[site]["recent_available"]:
-            if (
-                category is not None
-                and not all_sites[site]["recent_category_available"]
-            ):
-                return error_handler(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    json_message={
-                        "error": "Search by Recent category not available for {}.".format(
-                            site
-                        )
-                    },
-                )
-            if category is not None and category not in all_sites[site]["categories"]:
-                return error_handler(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    json_message={
-                        "error": "Selected category not available.",
-                        "available_categories": all_sites[site]["categories"],
-                    },
-                )
-            resp = await all_sites[site]["website"]().recent(category, page, limit)
-            if resp is None:
-                return error_handler(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    json_message={
-                        "error": "Website Blocked Change IP or Website Domain."
-                    },
-                )
-
-            elif len(resp["data"]) > 0:
-                return resp
-            else:
-                return error_handler(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    json_message={"error": "Result not found."},
-                )
-        else:
-            return error_handler(
-                status_code=status.HTTP_404_NOT_FOUND,
-                json_message={
-                    "error": "Recent search not availabe for {}.".format(site)
-                },
-            )
-    return error_handler(
-        status_code=status.HTTP_404_NOT_FOUND,
-        json_message={"error": "Selected Site Not Available"},
-    )
+    cache_key = f"recent:{site}:{limit}:{category}:{page}"
+    return await cache_response(cache_key, lambda: fetch_recent_results(site, limit, category, page))
