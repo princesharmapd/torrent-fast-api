@@ -16,7 +16,7 @@ db = client["torrent_cache"]
 
 # Function to create TTL index for a site-specific collection
 async def create_ttl_index(collection_name: str):
-    await db[collection_name].create_index("createdAt", expireAfterSeconds=86400)  # 24 hours
+    await db.search_collection_yts.create_index("createdAt", expireAfterSeconds=86400)  # 24 hours
 
 # Helper function to check cache
 async def get_cached_data(collection_name: str, key: str):
