@@ -5,6 +5,7 @@ from helper.error_messages import error_handler
 from motor.motor_asyncio import AsyncIOMotorClient
 import datetime
 import ssl
+from pymongo import MongoClient
 
 router = APIRouter(tags=["Trending Torrents"])
 
