@@ -1,37 +1,11 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter
 from typing import Optional
 from helper.is_site_available import check_if_site_available
+from fastapi import status
 from helper.error_messages import error_handler
-from motor.motor_asyncio import AsyncIOMotorClient
-import datetime
-from pymongo.mongo_client import MongoClient
-from pymongo.server_api import ServerApi
 
 router = APIRouter(tags=["Search"])
 
-# MongoDB Connection
-uri = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-client = MongoClient(uri, server_api=ServerApi('1'))
-db = client["torrent_cache"]
-
-# Function to create TTL index for a site-specific collection
-async def create_ttl_index(collection_name: str):
-    await db.search_collection_yts.create_index("createdAt", expireAfterSeconds=86400)  # 24 hours
-
-# Helper function to check cache
-async def get_cached_data(collection_name: str, key: str):
-    cached_data = await db[collection_name].find_one({"query": key})
-    if cached_data:
-        return cached_data["data"]
-    return None
-
-# Helper function to store cache
-async def store_cache(collection_name: str, key: str, data: dict):
-    await db[collection_name].insert_one({
-        "query": key,
-        "data": data,
-        "createdAt": datetime.datetime.utcnow()
-    })
 
 @router.get("/")
 @router.get("")
@@ -41,43 +15,28 @@ async def search_for_torrents(
     site = site.lower()
     query = query.lower()
     all_sites = check_if_site_available(site)
-
-    if not all_sites:
-        return error_handler(
-            status_code=status.HTTP_404_NOT_FOUND,
-            json_message={"error": "Selected Site Not Available"},
+    if all_sites:
+        limit = (
+            all_sites[site]["limit"]
+            if limit == 0 or limit > all_sites[site]["limit"]
+            else limit
         )
 
-    # Define collection name dynamically based on site
-    collection_name = f"search_cache_{site}"
-    await create_ttl_index(collection_name)  # Ensure TTL index exists
+        resp = await all_sites[site]["website"]().search(query, page, limit)
+        if resp is None:
+            return error_handler(
+                status_code=status.HTTP_403_FORBIDDEN,
+                json_message={"error": "Website Blocked Change IP or Website Domain."},
+            )
+        elif len(resp["data"]) > 0:
+            return resp
+        else:
+            return error_handler(
+                status_code=status.HTTP_404_NOT_FOUND,
+                json_message={"error": "Result not found."},
+            )
 
-    # Check MongoDB cache
-    cache_key = f"{query}_page{page}_limit{limit}"
-    cached_data = await get_cached_data(collection_name, cache_key)
-    if cached_data:
-        return cached_data
-
-    # Fetch new data if cache is empty
-    limit = (
-        all_sites[site]["limit"]
-        if limit == 0 or limit > all_sites[site]["limit"]
-        else limit
+    return error_handler(
+        status_code=status.HTTP_404_NOT_FOUND,
+        json_message={"error": "Selected Site Not Available"},
     )
-
-    resp = await all_sites[site]["website"]().search(query, page, limit)
-
-    if resp is None:
-        return error_handler(
-            status_code=status.HTTP_403_FORBIDDEN,
-            json_message={"error": "Website Blocked. Change IP or Website Domain."},
-        )
-    elif len(resp["data"]) > 0:
-        # Store data in MongoDB cache
-        await store_cache(collection_name, cache_key, resp)
-        return resp
-    else:
-        return error_handler(
-            status_code=status.HTTP_404_NOT_FOUND,
-            json_message={"error": "Result not found."},
-        )
