@@ -8,7 +8,7 @@ import datetime
 router = APIRouter(tags=["Trending Torrents"])
 
 # MongoDB Connection
-MONGO_URI = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+MONGO_URI = "mongodb+srv://princesharmaofficial1:cnCUNJBik9DV7LpB@cluster0.nb8ou4f.mongodb.net/?retryWrites=true&w=majority&tls=true&tlsAllowInvalidCertificates=true"
 client = AsyncIOMotorClient(MONGO_URI)
 db = client["torrent_cache"]
 
